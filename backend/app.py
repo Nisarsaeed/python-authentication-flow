@@ -8,6 +8,7 @@ from routes.user import user_ns
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from flask import send_from_directory
+from datetime import timedelta
 
 def create_app():
     app = Flask(__name__)
@@ -29,6 +30,8 @@ def create_app():
     app.config["JWT_TOKEN_LOCATION"] = ["cookies"]
     app.config["JWT_COOKIE_SECURE"] = False  # True in production with HTTPS
     app.config["JWT_COOKIE_CSRF_PROTECT"] = False  # keep False until you setup CSRF
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=15)   # default: 15 mins
+    app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(days=7)  
 
     # Init extensions
     db.init_app(app)
