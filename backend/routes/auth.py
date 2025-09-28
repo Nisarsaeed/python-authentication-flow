@@ -1,6 +1,6 @@
 import os
 import random
-from flask import request, current_app, jsonify, make_response   # ✅ import current_app
+from flask import request, current_app, jsonify, make_response 
 from werkzeug.utils import secure_filename
 from flask_restx import Namespace, Resource
 from extensions import db
@@ -8,7 +8,7 @@ from extensions import mail
 from flask_mail import Message
 from models import User
 from datetime import datetime, timedelta, timezone
-from flask_jwt_extended import create_access_token, create_refresh_token, set_access_cookies, set_refresh_cookies, unset_jwt_cookies, get_jwt_identity, jwt_required
+from flask_jwt_extended import create_access_token, create_refresh_token, set_access_cookies, set_refresh_cookies, unset_jwt_cookies, get_jwt_identity, jwt_required, get_jwt
 import uuid
 
 auth_ns = Namespace("auth", description="Authentication operations")
@@ -49,7 +49,6 @@ class Register(Resource):
         )
         new_user.set_password(password)
     
-
         otp = str(random.randint(100000, 999999))
         expiry = datetime.now(timezone.utc) + timedelta(minutes=5)
         new_user.otp_code = otp
@@ -105,10 +104,10 @@ class Login(Resource):
         user = User.query.filter_by(email=email).first()
         
         if not user or not user.check_password(password):
-            return make_response(jsonify({"msg": "Invalid credentials"}), 401)
+            return make_response(jsonify({"msg": "Invalid credentials"}), 400)
         
         if not user.is_verified:
-            return make_response(jsonify({"msg": "Account not verified"}), 401)
+            return make_response(jsonify({"msg": "Account not verified"}), 400)
         
         access_token = create_access_token(identity=str(user.id),additional_claims={"role": user.role}, fresh=True)
         refresh_token = create_refresh_token(identity=str(user.id),additional_claims={"role": user.role})
@@ -121,14 +120,24 @@ class Login(Resource):
 @auth_ns.route("/refresh-token")
 class RefreshToken(Resource):
     method_decorators = [jwt_required(refresh=True)]
-    def get(self):
-        current_user = get_jwt_identity()
-        new_access_token = create_access_token(identity=current_user, fresh=False)
+    def post(self):
+        # identity from the validated refresh token
+        identity = get_jwt_identity()
 
-        resp = make_response(jsonify({
-            "msg": "Token refreshed",
-            "access_token": new_access_token
-        }), 200)
+        # read claims from the refresh token (so we can preserve 'role' claim)
+        claims = get_jwt()  # returns dict of token claims
+        role_claim = claims.get("role")
+
+        additional_claims = {"role": role_claim} if role_claim else None
+
+        new_access_token = create_access_token(
+            identity=identity,
+            additional_claims=additional_claims or {},
+            fresh=False
+        )
+
+        resp = make_response(jsonify({"msg": "Token refreshed"}), 200)
+        # overwrite the access token cookie
         set_access_cookies(resp, new_access_token)
         return resp
 
