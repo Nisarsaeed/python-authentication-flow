@@ -1,5 +1,4 @@
 import { User } from "@/types/auth";
-import { useAuth } from "@/contexts/AuthContext";
 
 const API_BASE_URL = '/api';
 
@@ -8,24 +7,6 @@ export class APIError extends Error {
     super(message);
   }
 }
-
-async function fetchWithRefresh<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  try {
-    return await apiRequest<T>(endpoint, options);
-  } catch (err: any) {
-    // Only handle 401 from expired token, not invalid credentials
-    if (err instanceof APIError && err.status === 401 && err.message === 'Access token expired') {
-      try {
-        await api.refreshToken(); // get new access token
-        return await apiRequest<T>(endpoint, options); // retry original request
-      } catch {
-        throw new APIError(401, 'Session expired'); // logout can handle this
-      }
-    }
-    throw err;
-  }
-}
-
 
 async function apiRequest<T>(
   endpoint: string, 
@@ -55,7 +36,6 @@ async function apiRequest<T>(
     };
   }
 
-
   try {
     const response = await fetch(url, config);
     
@@ -68,6 +48,31 @@ async function apiRequest<T>(
   } catch (error) {
     if (error instanceof APIError) throw error;
     throw new APIError(0, 'Network error');
+  }
+}
+
+async function fetchWithRefresh<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  try {
+    console.log("called");
+    return await apiRequest<T>(endpoint, options);
+  } catch (err: any) {
+    
+    if (err instanceof APIError && err.status === 401) {
+      try {
+        await apiRequest<{ msg: string }>("/auth/refresh-token", {
+          method: 'POST',
+          credentials: 'include',
+        }); // refresh
+        return await apiRequest<T>(endpoint, options); // retry
+      } catch {
+        throw new APIError(401, "Session expired");
+      }
+    }
+
+    throw err;
   }
 }
 
@@ -90,9 +95,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-
-  refreshToken: () =>
-    apiRequest<{ msg: string }>('/auth/refresh-token'),
 
   logout: () =>
     apiRequest<{ msg: string }>('/auth/logout', { method: 'POST' }),
